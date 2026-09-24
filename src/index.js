@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import { getAnimeList, getAnimeDetail, getStreamUrls, searchAnime, getDesustreamVideoUrl } from './scraper.js';
 
 const UPSTREAM_URL = process.env.UPSTREAM_URL || 'https://cdn.odcloud.net/anime/Otakudesu.io_Clvts.S2--12_End_720p.mp4';
 const FALLBACK_URLS = (process.env.FALLBACK_URLS || '')
@@ -24,7 +25,7 @@ async function tryUpstream(urls, init) {
 }
 
 function isBloggerVideoUrl(url) {
-  return /blogger\.com\/video-playback/i.test(url) || /blogspot\.com\/video-playback/i.test(url);
+  return /blogger\.com\/video-playback/i.test(url) || /blogspot\.com\/video-playback/i.test(url) || /blogger\.com\/video\.g/i.test(url);
 }
 
 async function resolveBloggerVideoUrl(bloggerUrl) {
@@ -39,6 +40,45 @@ async function resolveBloggerVideoUrl(bloggerUrl) {
   }
   
   const text = await res.text();
+  
+  // Handle video.g format - look for video URLs in page data
+  if (bloggerUrl.includes('video.g')) {
+    // Try to find video URLs in the page source
+    const videoMatches = text.match(/(https?:\/\/[^"'\s]+\.(?:mp4|webm|ogg)[^"'\s]*)/gi);
+    if (videoMatches && videoMatches.length > 0) {
+      return videoMatches[0];
+    }
+    
+    // Look for YouTube embeds
+    const youtubeMatch = text.match(/(https?:\/\/(?:www\.)?youtube\.com\/embed\/[^"'\s]+)/i);
+    if (youtubeMatch) {
+      return youtubeMatch[1];
+    }
+    
+    // Look for data attributes that might contain video info
+    const dataMatch = text.match(/data-ogpc="([^"]+)"/i);
+    if (dataMatch) {
+      try {
+        const data = JSON.parse(dataMatch[1].replace(/&quot;/g, '"'));
+        // Extract any video URLs from the data structure
+        const findVideoUrls = (obj) => {
+          const urls = [];
+          if (typeof obj === 'string' && /\.(mp4|webm|ogg)/i.test(obj)) {
+            urls.push(obj);
+          } else if (Array.isArray(obj)) {
+            obj.forEach(item => urls.push(...findVideoUrls(item)));
+          } else if (obj && typeof obj === 'object') {
+            Object.values(obj).forEach(item => urls.push(...findVideoUrls(item)));
+          }
+          return urls;
+        };
+        const videoUrls = findVideoUrls(data);
+        if (videoUrls.length > 0) return videoUrls[0];
+      } catch {}
+    }
+  }
+  
+  // Original patterns for video-playback format
   const m = text.match(/(https?:\/\/[^"'\s]+\.(?:mp4|webm|ogg)[^"'\s]*)/i);
   if (m) return m[1];
   
@@ -87,7 +127,16 @@ app.get('/', (req, res) => {
   res.json({
     name: 'video-api',
     version: '1.0.0',
-    endpoints: ['/health', '/metadata', '/video']
+    endpoints: [
+      '/health',
+      '/metadata',
+      '/video',
+      '/blogger/resolve',
+      '/scrape/anime-list',
+      '/scrape/search',
+      '/scrape/detail',
+      '/scrape/stream'
+    ]
   });
 });
 
@@ -110,6 +159,78 @@ app.get('/metadata', async (req, res) => {
     });
   } catch (err) {
     res.status(502).json({ error: 'Upstream unreachable', message: err.message });
+  }
+});
+
+app.get('/scrape/anime-list', async (req, res) => {
+  try {
+    const page = Number(req.query.page) || 1;
+    const animeList = await getAnimeList(page);
+    res.json({ page, count: animeList.length, data: animeList });
+  } catch (err) {
+    res.status(502).json({ error: 'Failed to fetch anime list', message: err.message });
+  }
+});
+
+app.get('/scrape/search', async (req, res) => {
+  const query = req.query.q;
+  if (!query || typeof query !== 'string') {
+    return res.status(400).json({ error: 'Missing ?q= parameter for search' });
+  }
+  try {
+    const results = await searchAnime(query.trim());
+    res.json({ query: query.trim(), count: results.length, data: results });
+  } catch (err) {
+    res.status(502).json({ error: 'Search failed', message: err.message });
+  }
+});
+
+app.get('/scrape/detail', async (req, res) => {
+  const animeUrl = req.query.url;
+  if (!animeUrl || typeof animeUrl !== 'string') {
+    return res.status(400).json({ error: 'Missing ?url= parameter with anime detail URL' });
+  }
+  try {
+    const detail = await getAnimeDetail(animeUrl.trim());
+    res.json({ url: animeUrl.trim(), ...detail });
+  } catch (err) {
+    res.status(502).json({ error: 'Failed to fetch anime detail', message: err.message });
+  }
+});
+
+app.get('/scrape/stream', async (req, res) => {
+  const episodeUrl = req.query.url;
+  if (!episodeUrl || typeof episodeUrl !== 'string') {
+    return res.status(400).json({ error: 'Missing ?url= parameter with episode URL' });
+  }
+  try {
+    const streams = await getStreamUrls(episodeUrl.trim());
+    
+    // If no direct URLs found, try Otakudesu embed method
+    if (streams.mp4.length === 0 && streams.hls.length === 0 && streams.embeds.length > 0) {
+      for (const embedUrl of streams.embeds) {
+        try {
+          const videoUrl = await getDesustreamVideoUrl(embedUrl);
+          if (videoUrl) {
+            if (videoUrl.includes('.m3u8')) {
+              streams.hls.push(videoUrl);
+            } else if (videoUrl.includes('.mp4')) {
+              streams.mp4.push(videoUrl);
+            } else {
+              streams.other.push(videoUrl);
+            }
+            break;
+          }
+        } catch (embedErr) {
+          // Try next embed
+          continue;
+        }
+      }
+    }
+    
+    res.json({ url: episodeUrl.trim(), ...streams });
+  } catch (err) {
+    res.status(502).json({ error: 'Failed to fetch stream URLs', message: err.message });
   }
 });
 
