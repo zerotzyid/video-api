@@ -99,6 +99,17 @@ export async function fetch(req) {
     });
   }
 
+  if (url.pathname === '/') {
+    return new Response(JSON.stringify({
+      name: 'video-api',
+      version: '1.0.0',
+      endpoints: ['/health', '/metadata', '/video']
+    }), {
+      status: 200,
+      headers: corsHeaders({ 'Content-Type': 'application/json' })
+    });
+  }
+
   if (url.pathname === '/health') {
     return new Response(JSON.stringify({ status: 'ok' }), {
       status: 200,

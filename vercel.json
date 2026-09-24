@@ -7,6 +7,7 @@
     }
   ],
   "routes": [
+    { "src": "/", "dest": "/src/vercel.js" },
     { "src": "/health", "dest": "/src/vercel.js" },
     { "src": "/metadata", "dest": "/src/vercel.js" },
     { "src": "/video", "dest": "/src/vercel.js" },

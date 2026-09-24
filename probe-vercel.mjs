@@ -24,6 +24,7 @@ async function run(label, req) {
   }
 }
 
+await run('root', makeReq({ url: 'http://localhost/' }));
 await run('health', makeReq({ url: 'http://localhost/health' }));
 await run('video-range', makeReq({
   url: 'http://localhost/video',
