@@ -9,6 +9,7 @@ Node.js API untuk proxy streaming video dengan dukungan Range Requests dan CORS.
 - `GET /metadata` - Metadata video dari upstream
 - `GET /video` - Stream video (mendukung `?url=` untuk custom upstream)
 - `HEAD /video` - Head request untuk metadata video
+- `GET /blogger/resolve?url=<blogger-post-url>` - Resolve URL video dari postingan Blogger
 
 ## Usage
 

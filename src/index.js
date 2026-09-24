@@ -23,6 +23,61 @@ async function tryUpstream(urls, init) {
   throw lastErr;
 }
 
+function isBloggerVideoUrl(url) {
+  return /blogger\.com\/video-playback/i.test(url) || /blogspot\.com\/video-playback/i.test(url);
+}
+
+async function resolveBloggerVideoUrl(bloggerUrl) {
+  const res = await fetch(bloggerUrl, { method: 'GET', redirect: 'manual' });
+  
+  if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
+    return res.headers.get('location');
+  }
+  
+  if (res.ok && res.headers.get('content-type') && res.headers.get('content-type').includes('video')) {
+    return bloggerUrl;
+  }
+  
+  const text = await res.text();
+  const m = text.match(/(https?:\/\/[^"'\s]+\.(?:mp4|webm|ogg)[^"'\s]*)/i);
+  if (m) return m[1];
+  
+  const m2 = text.match(/video-playback\?token=([^"'\s]+)/i);
+  if (m2) return `https://www.blogger.com/video-playback?token=${m2[1]}`;
+  
+  return null;
+}
+
+async function getBloggerVideoUrl(postUrl) {
+  if (!postUrl || !/^https?:\/\//i.test(postUrl)) {
+    throw new Error('Invalid Blogger post URL');
+  }
+
+  const resolved = await resolveBloggerVideoUrl(postUrl);
+  if (resolved) return resolved;
+
+  const html = await fetch(postUrl).then((r) => r.text());
+  
+  const patterns = [
+    /https?:\/\/[^"'\s]+blogger\.com\/video-playback\?[^"'\s]*/i,
+    /https?:\/\/[^"'\s]+blogspot\.com\/video-playback\?[^"'\s]*/i,
+    /https?:\/\/[^"'\s]+\.(?:mp4|webm|ogg)(?:\?[^"'\s]*)?/i,
+    /"contentUrl"\s*:\s*"(https?:\/\/[^"]+\.(?:mp4|webm|ogg)[^"]*)"/i,
+    /"url"\s*:\s*"(https?:\/\/[^"]+\.(?:mp4|webm|ogg)[^"]*)"/i
+  ];
+  
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (match) {
+      let videoUrl = match[1] || match[0];
+      if (videoUrl.includes('\\/')) videoUrl = videoUrl.replace(/\\\//g, '/');
+      return videoUrl;
+    }
+  }
+  
+  throw new Error('No video found in Blogger post');
+}
+
 const app = express();
 
 app.use(cors({ origin: CORS_ORIGIN }));
@@ -58,10 +113,31 @@ app.get('/metadata', async (req, res) => {
   }
 });
 
+app.get('/blogger/resolve', async (req, res) => {
+  const postUrl = req.query.url;
+  if (!postUrl || typeof postUrl !== 'string') {
+    return res.status(400).json({ error: 'Missing ?url= parameter with Blogger post URL' });
+  }
+  try {
+    const videoUrl = await getBloggerVideoUrl(postUrl.trim());
+    res.json({ postUrl: postUrl.trim(), videoUrl });
+  } catch (err) {
+    res.status(502).json({ error: 'Failed to resolve Blogger video', message: err.message });
+  }
+});
+
 app.head('/video', async (req, res) => {
   const queryUrl = req.query.url;
-  const upstreamUrl = typeof queryUrl === 'string' && queryUrl.trim() ? queryUrl.trim() : UPSTREAM_URL;
+  let upstreamUrl = typeof queryUrl === 'string' && queryUrl.trim() ? queryUrl.trim() : UPSTREAM_URL;
   if (!/^https?:\/\//i.test(upstreamUrl)) return res.status(400).json({ error: 'Invalid upstream URL. Use ?url=https://...' });
+
+  if (isBloggerVideoUrl(upstreamUrl)) {
+    try {
+      const resolved = await resolveBloggerVideoUrl(upstreamUrl);
+      if (resolved) upstreamUrl = resolved;
+    } catch {}
+  }
+
   try {
     const upstream = await tryUpstream([upstreamUrl, ...FALLBACK_URLS], { method: 'HEAD' });
     if (!upstream.ok) return res.status(502).json({ error: 'Upstream error', status: upstream.status });
@@ -81,10 +157,17 @@ app.get('/video', async (req, res) => {
   if (range) headers['Range'] = range;
 
   const queryUrl = req.query.url;
-  const upstreamUrl = typeof queryUrl === 'string' && queryUrl.trim() ? queryUrl.trim() : UPSTREAM_URL;
+  let upstreamUrl = typeof queryUrl === 'string' && queryUrl.trim() ? queryUrl.trim() : UPSTREAM_URL;
 
   if (!/^https?:\/\//i.test(upstreamUrl)) {
     return res.status(400).json({ error: 'Invalid upstream URL. Use ?url=https://...' });
+  }
+
+  if (isBloggerVideoUrl(upstreamUrl)) {
+    try {
+      const resolved = await resolveBloggerVideoUrl(upstreamUrl);
+      if (resolved) upstreamUrl = resolved;
+    } catch {}
   }
 
   try {
