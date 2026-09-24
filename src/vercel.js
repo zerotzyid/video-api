@@ -9,8 +9,24 @@ function corsHeaders(extra = {}) {
   };
 }
 
+function getHeader(req, name) {
+  const headers = req.headers;
+  if (headers && typeof headers.get === 'function') {
+    return headers.get(name);
+  }
+  if (headers && typeof headers === 'object') {
+    const lower = name.toLowerCase();
+    for (const key of Object.keys(headers)) {
+      if (key.toLowerCase() === lower) {
+        return headers[key];
+      }
+    }
+  }
+  return null;
+}
+
 async function proxyVideo(req) {
-  const range = req.headers.get('range');
+  const range = getHeader(req, 'range');
   const headers = {};
   if (range) headers['Range'] = range;
 
