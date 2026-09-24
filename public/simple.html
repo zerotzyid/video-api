@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simple Video Test</title>
+</head>
+<body>
+<h1>Simple Video Test</h1>
+<p>If this doesn't play, the issue is likely:</p>
+<ul>
+  <li>Network/firewall blocking port 3003</li>
+  <li>Browser/device codec issue</li>
+  <li>CDN geo-blocking from your location</li>
+</ul>
+
+<video controls width="100%" style="max-width: 800px;">
+  <source src="http://159.223.62.211:3003/video?url=https://cdn.odcloud.net/anime/Otakudesu.io_Clvts.S2--12_End_720p.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
+
+<p><strong>Direct CDN URL (for comparison):</strong></p>
+<video controls width="100%" style="max-width: 800px;">
+  <source src="https://cdn.odcloud.net/anime/Otakudesu.io_Clvts.S2--12_End_720p.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
+
+<script>
+const video = document.querySelector('video');
+video.addEventListener('error', (e) => {
+  console.error('Video error:', video.error);
+  alert('Error code: ' + (video.error ? video.error.code : 'unknown') + '\nMessage: ' + (video.error ? video.error.message : 'unknown'));
+});
+video.addEventListener('loadedmetadata', () => {
+  console.log('Loaded metadata, duration:', video.duration);
+});
+video.addEventListener('canplay', () => {
+  console.log('Can play');
+});
+</script>
+</body>
+</html>

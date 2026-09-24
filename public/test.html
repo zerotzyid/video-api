@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Video Proxy Test</title>
+<style>
+  body { font-family: sans-serif; padding: 20px; }
+  video { max-width: 100%; margin-top: 10px; background: #000; }
+  .info { background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 4px; }
+  .error { background: #ffe0e0; }
+  .success { background: #e0ffe0; }
+</style>
+</head>
+<body>
+<h1>Video Proxy Test</h1>
+
+<div class="info">
+  <strong>Test URL:</strong><br>
+  <input id="urlInput" type="text" size="80" value="http://159.223.62.211:3003/video?url=https://cdn.odcloud.net/anime/Otakudesu.io_Clvts.S2--12_End_720p.mp4">
+  <br><br>
+  <button onclick="loadVideo()">Load Video</button>
+  <button onclick="testRange()">Test Range Request</button>
+  <button onclick="testDirect()">Test Direct URL</button>
+</div>
+
+<div class="info" id="status">Status: Ready</div>
+
+<video id="player" controls></video>
+
+<script>
+const player = document.getElementById('player');
+const status = document.getElementById('status');
+
+function log(msg, type = 'info') {
+  const div = document.createElement('div');
+  div.className = 'info ' + type;
+  div.textContent = msg;
+  status.appendChild(div);
+  console.log(msg);
+}
+
+function clearLog() {
+  status.innerHTML = '';
+}
+
+async function testRange() {
+  const url = document.getElementById('urlInput').value;
+  clearLog();
+  log('Testing range request...');
+  
+  try {
+    const response = await fetch(url, {
+      headers: { 'Range': 'bytes=0-1048575' }
+    });
+    
+    log('Range test - Status: ' + response.status);
+    log('Content-Range: ' + response.headers.get('Content-Range'));
+    log('Accept-Ranges: ' + response.headers.get('Accept-Ranges'));
+    log('Content-Type: ' + response.headers.get('Content-Type'));
+    log('Content-Length: ' + response.headers.get('Content-Length'));
+    
+    if (response.status === 200 || response.status === 206) {
+      log('✓ Range request successful', 'success');
+    } else {
+      log('✗ Range request failed', 'error');
+    }
+  } catch (err) {
+    log('✗ Range test error: ' + err.message, 'error');
+  }
+}
+
+async function testDirect() {
+  const directUrl = 'https://cdn.odcloud.net/anime/Otakudesu.io_Clvts.S2--12_End_720p.mp4';
+  clearLog();
+  log('Testing direct URL...');
+  
+  try {
+    const response = await fetch(directUrl, {
+      headers: { 'Range': 'bytes=0-1048575' }
+    });
+    
+    log('Direct test - Status: ' + response.status);
+    log('Content-Range: ' + response.headers.get('Content-Range'));
+    log('Accept-Ranges: ' + response.headers.get('Accept-Ranges'));
+    log('Content-Type: ' + response.headers.get('Content-Type'));
+    
+    if (response.status === 200 || response.status === 206) {
+      log('✓ Direct URL works', 'success');
+    } else {
+      log('✗ Direct URL failed', 'error');
+    }
+  } catch (err) {
+    log('✗ Direct test error: ' + err.message, 'error');
+  }
+}
+
+function loadVideo() {
+  const url = document.getElementById('urlInput').value;
+  clearLog();
+  log('Loading: ' + url);
+  
+  player.src = url;
+  
+  player.onloadedmetadata = () => {
+    log('✓ Video loaded - Duration: ' + player.duration + 's, Size: ' + player.videoWidth + 'x' + player.videoHeight, 'success');
+  };
+  
+  player.onerror = (e) => {
+    const error = player.error;
+    let errorMsg = 'Unknown error';
+    if (error) {
+      switch(error.code) {
+        case 1: errorMsg = 'MEDIA_ERR_ABORTED - User aborted playback'; break;
+        case 2: errorMsg = 'MEDIA_ERR_NETWORK - Network error'; break;
+        case 3: errorMsg = 'MEDIA_ERR_DECODE - Decode error'; break;
+        case 4: errorMsg = 'MEDIA_ERR_SRC_NOT_SUPPORTED - Format not supported'; break;
+      }
+    }
+    log('✗ Video error: ' + errorMsg + ' (code: ' + (error ? error.code : 'unknown') + ')', 'error');
+  };
+  
+  player.oncanplay = () => {
+    log('✓ Video can play', 'success');
+  };
+  
+  player.onwaiting = () => {
+    log('⏳ Buffering...');
+  };
+  
+  player.onplaying = () => {
+    log('▶ Playing', 'success');
+  };
+  
+  player.onstalled = () => {
+    log('⚠ Stalled - download stalled', 'error');
+  };
+  
+  player.onabort = () => {
+    log('⚠ Aborted', 'error');
+  };
+  
+  player.onemptied = () => {
+    log('⚠ Emptied - media emptied', 'error');
+  };
+  
+  player.onsuspend = () => {
+    log('⚠ Suspend - download suspended', 'error');
+  };
+  
+  player.onratechange = () => {
+    log('⏩ Rate changed: ' + player.playbackRate);
+  };
+  
+  player.onseeked = () => {
+    log('⏩ Seeked to: ' + player.currentTime + 's');
+  };
+}
+
+// Auto-test on page load
+window.onload = () => {
+  log('Page loaded. Click buttons to test.');
+  log('Server: http://159.223.62.211:3003');
+};
+</script>
+</body>
+</html>
