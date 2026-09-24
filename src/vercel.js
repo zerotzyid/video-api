@@ -1,5 +1,6 @@
 const UPSTREAM_URL = process.env.UPSTREAM_URL || 'https://cdn.odcloud.net/anime/Otakudesu.io_Clvts.S2--12_End_720p.mp4';
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
+const globalFetch = globalThis.fetch;
 
 function corsHeaders(extra = {}) {
   return {
@@ -41,7 +42,7 @@ async function proxyVideo(req) {
     });
   }
 
-  const upstream = await fetch(upstreamUrl, { headers });
+  const upstream = await globalFetch(upstreamUrl, { headers });
   const status = upstream.status;
 
   if (status === 416) {
@@ -85,8 +86,7 @@ async function proxyVideo(req) {
     headers: responseHeaders
   });
 }
-
-export default async function handler(req) {
+export async function fetch(req) {
   const url = new URL(req.url, 'http://localhost');
 
   if (req.method === 'OPTIONS') {
@@ -108,7 +108,7 @@ export default async function handler(req) {
 
   if (url.pathname === '/metadata') {
     try {
-      const upstream = await fetch(UPSTREAM_URL, { method: 'HEAD' });
+      const upstream = await globalFetch(UPSTREAM_URL, { method: 'HEAD' });
       if (!upstream.ok) {
         return new Response(JSON.stringify({ error: 'Upstream metadata fetch failed', status: upstream.status }), {
           status: 502,
@@ -136,7 +136,7 @@ export default async function handler(req) {
   if (url.pathname === '/video') {
     if (req.method === 'HEAD') {
       try {
-        const upstream = await fetch(UPSTREAM_URL, { method: 'HEAD' });
+        const upstream = await globalFetch(UPSTREAM_URL, { method: 'HEAD' });
         if (!upstream.ok) {
           return new Response(JSON.stringify({ error: 'Upstream error', status: upstream.status }), {
             status: 502,

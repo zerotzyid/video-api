@@ -1,4 +1,4 @@
-import handler from './src/vercel.js';
+import { fetch as vercelFetch } from './src/vercel.js';
 
 function makeReq({ method = 'GET', url = 'http://localhost/video', headers = {} } = {}) {
   return { method, url, headers };
@@ -6,7 +6,7 @@ function makeReq({ method = 'GET', url = 'http://localhost/video', headers = {} 
 
 async function run(label, req) {
   try {
-    const res = await handler(req);
+    const res = await vercelFetch(req);
     const text = await res.text();
     console.log(`[${label}] status=${res.status}`);
     if (label === 'health') {
